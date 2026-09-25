@@ -1,6 +1,6 @@
 export const cycles = { monthly: '每月', quarterly: '每季', yearly: '每年', weekly: '每周' };
 export const currencies = ['JPY', 'USD', 'CNY', 'EUR', 'GBP', 'HKD', 'TWD', 'KRW', 'SGD', 'AUD', 'CAD'];
-export const categories = ['影音娱乐', '效率工具', '云端存储', '域名服务', '生活服务', '其他'];
+export const categories = ['影音娱乐', '效率工具', '云端存储', '域名服务', '生活服务', '住房租金', '通讯网络', '保险保障', '其他'];
 export const dateKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const parseDate = value => new Date(`${value}T00:00:00`);
 export const monthly = s => s.amount * ({ monthly: 1, quarterly: 1 / 3, yearly: 1 / 12, weekly: 52 / 12 }[s.cycle]);

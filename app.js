@@ -1,6 +1,8 @@
 import { cycles, currencies, categories, monthly, nextPayment, dateKey, parseDate, validate } from './model.js';
 const $ = s => document.querySelector(s);
 const paths = {
+phone:'<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/>',
+home:'<path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8"/>',
 dashboard:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
 layers:'<rect x="6" y="3" width="15" height="15" rx="3"/><path d="M15 21H5a2 2 0 0 1-2-2V9M10 8h7m-7 4h5"/>',
 calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/>',
@@ -46,7 +48,7 @@ function save(next,recovery=false){
 }
 function logo(s){
  const name=s.name.toLowerCase();let type='',content=esc(s.name.slice(0,1).toUpperCase());
- if(name.includes('netflix')){type='netflix';content='N';}else if(name.includes('spotify')){type='spotify';content=icon('spotify');}else if(name.includes('chatgpt')){type='chatgpt';content=icon('chatgpt');}else if(name.includes('google')){type='google';content='G';}else if(s.category==='域名服务'){type='domain';content=icon('globe');}else if(name.includes('邮箱')){type='mail';content=icon('mail');}
+ if(s.category==='住房租金'){type='home';content=icon('home');}else if(s.category==='通讯网络'){type='phone';content=icon('phone');}else if(s.category==='保险保障'){type='insurance';content=icon('shield');}else if(name.includes('netflix')){type='netflix';content='N';}else if(name.includes('spotify')){type='spotify';content=icon('spotify');}else if(name.includes('chatgpt')){type='chatgpt';content=icon('chatgpt');}else if(name.includes('google')){type='google';content='G';}else if(s.category==='域名服务'){type='domain';content=icon('globe');}else if(name.includes('邮箱')){type='mail';content=icon('mail');}
  return `<div class="service-logo logo-${type}" aria-hidden="true">${content}</div>`;
 }
 function render(){
@@ -69,7 +71,7 @@ function renderCards(){
  return `<button class="subscription-card ${s.status==='paused'?'paused':''}" data-edit="${esc(s.id)}" aria-label="编辑 ${esc(s.name)}"><div class="card-top">${logo(s)}<div><div class="card-name">${esc(s.name)}</div><div class="card-category">${esc(s.category)}</div></div><span class="card-more" aria-hidden="true">···</span></div><div class="card-price">${money(s.amount,s.currency)}<small>${s.currency} / ${{monthly:'月',yearly:'年',quarterly:'季',weekly:'周'}[s.cycle]}</small></div><div class="card-bottom"><span class="payment-method">${icon('card')}<span>${esc(s.method||'未设置付款方式')}</span></span><span class="due-badge ${next&&days<7?'soon':''}">${due}</span></div></button>`;
  }).join('')||`<div class="empty-state">${icon('layers')}<strong>${displayed().length?'没有找到匹配的订阅':'为喜欢的服务，留一个位置'}</strong><br>${displayed().length?'试试其他关键词或筛选条件。':'点击「添加订阅」，开始整理你的订阅生活。'}</div>`;
 }
-const titles={overview:['每一份订阅，都心中有数。','把喜欢的服务放在一起，让每一笔支出清晰可见。','总览'],subscriptions:['我的订阅','管理所有正在使用的服务，留下真正需要的。','我的订阅'],calendar:['扣款日历','提前看见每一笔支出，安排好你的订阅生活。','扣款日历'],data:['数据与备份','你的订阅，你来掌握。给重要的数据留一份备份。','数据与备份']};
+const titles={overview:['每一份订阅，都心中有数。','数字订阅、房租、话费与保险，让每一笔固定支出清晰可见。','总览'],subscriptions:['我的订阅','集中管理数字服务、房租、话费与保险等周期性支出。','我的订阅'],calendar:['扣款日历','提前看见每一笔支出，安排好你的订阅生活。','扣款日历'],data:['数据与备份','你的订阅，你来掌握。给重要的数据留一份备份。','数据与备份']};
 function setView(next){
  view=next;$('#page-title').textContent=titles[view][0];$('#page-subtitle').textContent=titles[view][1];$('#breadcrumb-title').textContent=titles[view][2];
  document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('selected',b.dataset.view===view);b.setAttribute('aria-current',b.dataset.view===view?'page':'false');});
