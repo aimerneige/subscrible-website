@@ -1,6 +1,20 @@
 export const cycles = { monthly: '每月', quarterly: '每季', yearly: '每年', weekly: '每周' };
 export const currencies = ['JPY', 'USD', 'CNY', 'EUR', 'GBP', 'HKD', 'TWD', 'KRW', 'SGD', 'AUD', 'CAD'];
-export const categories = ['影音娱乐', '效率工具', '云端存储', '域名服务', '生活服务', '住房租金', '通讯网络', '保险保障', '其他'];
+export const categories = ['影音娱乐', '效率工具', '云端存储', '域名服务', '服务器托管', '生活服务', '住房租金', '通讯网络', '保险保障', '游戏服务', '其他'];
+export const sections = [
+  { id: 'app', name: 'App 订阅', icon: 'layers', categories: ['影音娱乐', '效率工具', '云端存储'], hint: '视频、音乐、效率工具与云存储，把常用的 App 放在一起。', placeholder: '例如 Netflix、Spotify、ChatGPT' },
+  { id: 'domain', name: '域名订阅', icon: 'globe', categories: ['域名服务'], hint: '记录域名续费金额与日期，提前安排下一次续费。', placeholder: '例如 aimer.moe 域名续费' },
+  { id: 'server', name: '服务器订阅', icon: 'server', categories: ['服务器托管'], hint: 'VPS、云服务器与主机托管，按账单周期管理基础设施费用。', placeholder: '例如 VPS、云服务器、网站托管' },
+  { id: 'life', name: '生活开支', icon: 'home', categories: ['生活服务', '住房租金', '通讯网络', '保险保障'], hint: '房租、话费、宽带与保险，整理每月或每年的固定开支。', placeholder: '例如 房租、手机话费、年度保险' },
+  { id: 'game', name: '游戏开支', icon: 'game', categories: ['游戏服务'], hint: '游戏会员、月卡与通行证，仅记录会周期性续费的项目。', placeholder: '例如 Xbox Game Pass、游戏月卡' },
+  { id: 'other', name: '其他开支', icon: 'wallet', categories: ['其他'], hint: '暂时不属于以上分区的周期性支出，可以先放在这里。', placeholder: '填写服务或支出名称' }
+];
+export const sectionFor = category => sections.find(section => section.categories.includes(category));
+export const paymentPresets = ['Visa', 'Mastercard', 'JCB', 'American Express', '银联', '支付宝', '微信支付', 'PayPal', 'Apple Pay', '银行转账', '现金'];
+export function validatePaymentMethods(value) {
+  if (!Array.isArray(value) || value.length > 100 || value.some(method => typeof method !== 'string' || !method.trim() || method.length > 80)) throw new Error('曾用付款方式格式无效');
+  return [...new Set(value.map(method => method.trim()))];
+}
 export const dateKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const parseDate = value => new Date(`${value}T00:00:00`);
 export const monthly = s => s.amount * ({ monthly: 1, quarterly: 1 / 3, yearly: 1 / 12, weekly: 52 / 12 }[s.cycle]);

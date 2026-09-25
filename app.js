@@ -1,6 +1,8 @@
-import { cycles, currencies, categories, monthly, nextPayment, dateKey, parseDate, validate } from './model.js';
+import { cycles, currencies, sections, sectionFor, paymentPresets, validatePaymentMethods, monthly, nextPayment, dateKey, parseDate, validate } from './model.js';
 const $ = s => document.querySelector(s);
 const paths = {
+server:'<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.1M7 17.5h.1M12 6.5h5M12 17.5h5"/>',
+game:'<path d="M7 7h10c3 0 5 9 3 11-2 2-5-3-5-3H9s-3 5-5 3C2 16 4 7 7 7ZM8 9v5m-2.5-2.5h5M16 10h.1M18 13h.1"/>',
 phone:'<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/>',
 home:'<path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8"/>',
 dashboard:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -28,6 +30,30 @@ const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] 
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML=icon(el.dataset.icon); });
 const esc = value => String(value).replace(/[&<>"']/g,c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='subscrible.subscriptions.v1';
+const METHODS_KEY='subscrible.paymentMethods.v1';
+let paymentHistory=[],paymentHistoryWarning='',activeSection='all';
+function readPaymentHistory(){
+ try {paymentHistory=validatePaymentMethods(JSON.parse(localStorage.getItem(METHODS_KEY)||'[]'));paymentHistoryWarning='';}
+ catch {paymentHistoryWarning='无法读取曾用付款方式，仍可手动填写；原记录未被覆盖。';}
+}
+readPaymentHistory();
+function rememberPaymentMethods(methods){
+ readPaymentHistory();
+ if(paymentHistoryWarning)return;
+ const merged=[...new Set([...methods,...paymentHistory].map(method=>method.trim()).filter(Boolean))].filter(method=>!paymentPresets.includes(method)).slice(0,100);
+ try {localStorage.setItem(METHODS_KEY,JSON.stringify(merged));paymentHistory=merged;}
+ catch {paymentHistoryWarning='订阅已保存，但曾用付款方式未能保存，请检查浏览器存储权限或空间。';}
+}
+function renderPaymentOptions(){
+ const previous=[...new Set([...paymentHistory,...items.map(s=>s.method.trim())])].filter(method=>method&&!paymentPresets.includes(method));
+ $('#payment-preset').innerHTML='<option value="">选择常用 / 曾用方式，或在下方自定义</option>'+`<optgroup label="常用付款方式">${paymentPresets.map(method=>`<option value="${esc(method)}">${esc(method)}</option>`).join('')}</optgroup>`+(previous.length?`<optgroup label="曾用自定义方式">${previous.map(method=>`<option value="${esc(method)}">${esc(method)}</option>`).join('')}</optgroup>`:'');
+ syncPaymentPreset();
+ $('#payment-history-status').textContent=paymentHistoryWarning;
+}
+function syncPaymentPreset(){
+ const method=$('#subscription-form').elements.namedItem('method').value;
+ $('#payment-preset').value=[...$('#payment-preset').options].some(option=>option.value===method)?method:'';
+}
 let today=parseDate(dateKey(new Date())), calendarMonth=new Date(today.getFullYear(),today.getMonth(),1);
 const samples = () => [
 ['Netflix',2290,'JPY','monthly','影音娱乐','Visa',2],['Spotify',1080,'JPY','monthly','影音娱乐','Visa',5],['ChatGPT',19.99,'USD','monthly','效率工具','Mastercard',9],['Google One',199.99,'USD','yearly','云端存储','Visa',16],['Domain aimer.moe',13.99,'USD','yearly','域名服务','PayPal',24],['QQ 邮箱会员',22,'CNY','monthly','效率工具','支付宝',12]
@@ -43,11 +69,13 @@ let toastTimer;
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{$('#toast').hidden=true;},6000);}
 function save(next,recovery=false){
  if(blocked&&!recovery){toast(startupError);return false;}
- try {const clean=validate(next);localStorage.setItem(KEY,JSON.stringify(clean));items=clean;demo=false;blocked=false;render();return true;}
+ try {const clean=validate(next);localStorage.setItem(KEY,JSON.stringify(clean));rememberPaymentMethods([...clean,...items].map(s=>s.method));items=clean;demo=false;blocked=false;render();return true;}
  catch(error){toast(`未能保存：${error.message}。请检查浏览器存储空间或权限。`);return false;}
 }
 function logo(s){
  const name=s.name.toLowerCase();let type='',content=esc(s.name.slice(0,1).toUpperCase());
+ if(s.category==='服务器托管')return `<div class="service-logo" aria-hidden="true">${icon('server')}</div>`;
+ if(s.category==='游戏服务')return `<div class="service-logo" aria-hidden="true">${icon('game')}</div>`;
  if(s.category==='住房租金'){type='home';content=icon('home');}else if(s.category==='通讯网络'){type='phone';content=icon('phone');}else if(s.category==='保险保障'){type='insurance';content=icon('shield');}else if(name.includes('netflix')){type='netflix';content='N';}else if(name.includes('spotify')){type='spotify';content=icon('spotify');}else if(name.includes('chatgpt')){type='chatgpt';content=icon('chatgpt');}else if(name.includes('google')){type='google';content='G';}else if(s.category==='域名服务'){type='domain';content=icon('globe');}else if(name.includes('邮箱')){type='mail';content=icon('mail');}
  return `<div class="service-logo logo-${type}" aria-hidden="true">${content}</div>`;
 }
@@ -63,13 +91,20 @@ function render(){
 }
 function renderCards(){
  const query=$('#search').value.trim().toLocaleLowerCase();
- const filtered=displayed().filter(s=>(filter==='all'||(filter==='paused'?s.status==='paused':s.cycle===filter&&s.status==='active'))&&`${s.name} ${s.method} ${s.category}`.toLocaleLowerCase().includes(query));
- $('#list-count').textContent=filtered.length;$('#subscription-grid').classList.toggle('list',list);
- $('#subscription-grid').innerHTML=filtered.map(s=>{
+ const all=displayed();
+ const filtered=all.filter(s=>(activeSection==='all'||sectionFor(s.category).id===activeSection)&&(filter==='all'||(filter==='paused'?s.status==='paused':s.cycle===filter&&s.status==='active'))&&`${s.name} ${s.method} ${s.category}`.toLocaleLowerCase().includes(query));
+ $('#list-count').textContent=filtered.length;
+ $('#section-navigation').innerHTML=`<button class="section-tab ${activeSection==='all'?'selected':''}" data-section="all" aria-pressed="${activeSection==='all'}">全部 <span>${all.length}</span></button>`+sections.map(section=>`<button class="section-tab ${activeSection===section.id?'selected':''}" data-section="${section.id}" aria-pressed="${activeSection===section.id}">${icon(section.icon)}${section.name}<span>${all.filter(s=>sectionFor(s.category).id===section.id).length}</span></button>`).join('');
+ $('#subscription-grid').innerHTML=sections.filter(section=>activeSection==='all'||activeSection===section.id).map(section=>{
+   const entries=filtered.filter(s=>sectionFor(s.category).id===section.id);
+   if(!entries.length&&(query||filter!=='all'||(section.id==='other'&&activeSection==='all')))return '';
+   return `<section class="subscription-section" aria-labelledby="section-${section.id}"><div class="group-heading"><div><h3 id="section-${section.id}">${icon(section.icon)}${section.name}<span>${entries.length}</span></h3><p>${section.hint}</p></div><button class="button text-button" data-add-section="${section.id}" aria-label="添加${section.name}">${icon('plus')}添加</button></div><div class="subscription-grid ${list?'list':''}">${entries.map(renderCard).join('')||`<button class="section-empty" data-add-section="${section.id}">${icon('plus')}添加第一项${section.name}</button>`}</div></section>`;
+ }).join('')||'<div class="empty-state">没有找到匹配的订阅<br>试试其他关键词、分区或筛选条件。</div>';
+}
+function renderCard(s){
  const next=s.status==='active'?nextPayment(s,today):null,days=next?daysUntil(next):null;
  const due=s.status==='paused'?'已暂停':!next?'未设置付款日':days===0?'今天扣款':days<7?`${days} 天后扣款`:`${next.getMonth()+1} 月 ${next.getDate()} 日扣款`;
  return `<button class="subscription-card ${s.status==='paused'?'paused':''}" data-edit="${esc(s.id)}" aria-label="编辑 ${esc(s.name)}"><div class="card-top">${logo(s)}<div><div class="card-name">${esc(s.name)}</div><div class="card-category">${esc(s.category)}</div></div><span class="card-more" aria-hidden="true">···</span></div><div class="card-price">${money(s.amount,s.currency)}<small>${s.currency} / ${{monthly:'月',yearly:'年',quarterly:'季',weekly:'周'}[s.cycle]}</small></div><div class="card-bottom"><span class="payment-method">${icon('card')}<span>${esc(s.method||'未设置付款方式')}</span></span><span class="due-badge ${next&&days<7?'soon':''}">${due}</span></div></button>`;
- }).join('')||`<div class="empty-state">${icon('layers')}<strong>${displayed().length?'没有找到匹配的订阅':'为喜欢的服务，留一个位置'}</strong><br>${displayed().length?'试试其他关键词或筛选条件。':'点击「添加订阅」，开始整理你的订阅生活。'}</div>`;
 }
 const titles={overview:['每一份订阅，都心中有数。','数字订阅、房租、话费与保险，让每一笔固定支出清晰可见。','总览'],subscriptions:['我的订阅','集中管理数字服务、房租、话费与保险等周期性支出。','我的订阅'],calendar:['扣款日历','提前看见每一笔支出，安排好你的订阅生活。','扣款日历'],data:['数据与备份','你的订阅，你来掌握。给重要的数据留一份备份。','数据与备份']};
 function setView(next){
@@ -86,13 +121,22 @@ function renderCalendar(){
  for(let i=0;i<Math.ceil((offset+count)/7)*7;i++){const day=i-offset+1,valid=day>0&&day<=count;html+=`<div class="calendar-day ${valid&&dateKey(new Date(year,month,day))===dateKey(today)?'today':''}">${valid?`<span>${day}</span>${(events.get(day)||[]).map(s=>`<button class="calendar-event" data-edit="${esc(s.id)}">${esc(s.name)}<small>${money(s.amount,s.currency)} ${s.currency}</small></button>`).join('')}`:''}</div>`;}
  $('#calendar-grid').innerHTML=html;
 }
-function edit(id){
+function updateEditorSection(category){
+ const section=sections.find(section=>section.id===$('#editor-section').value);
+ $('#category-options').innerHTML=section.categories.map(c=>`<option>${c}</option>`).join('');
+ if(category&&section.categories.includes(category))$('#category-options').value=category;
+ $('#section-help').textContent=section.hint;
+ $('#subscription-form').elements.namedItem('name').placeholder=section.placeholder;
+}
+function edit(id,sectionId=activeSection==='all'?'app':activeSection){
  if(demo&&id){toast('当前为示例预览。可在「数据与备份」载入示例后编辑，或添加自己的订阅。');return;}
  const form=$('#subscription-form');form.reset();$('#form-error').textContent='';const item=items.find(s=>s.id===id);
+ $('#editor-section').value=item?sectionFor(item.category).id:sectionId;
+ updateEditorSection(item?.category);
  $('#editor-title').textContent=item?'编辑订阅':'添加订阅';$('#delete-button').hidden=!item;
  if(item)Object.entries(item).forEach(([key,value])=>{if(form.elements.namedItem(key))form.elements.namedItem(key).value=value;});
  else{form.elements.namedItem('id').value='';form.elements.namedItem('currency').value='CNY';}
- $('#editor').showModal();
+ readPaymentHistory();renderPaymentOptions();$('#editor').showModal();
 }
 let onConfirm;
 function confirmAction(message,action){$('#confirm-message').textContent=message;onConfirm=action;$('#confirm-dialog').showModal();}
@@ -100,33 +144,42 @@ $('#confirm-ok').onclick=()=>{$('#confirm-dialog').close();onConfirm?.();onConfi
 $('#confirm-cancel').onclick=()=>{$('#confirm-dialog').close();onConfirm=null;};
 $('#currency-options').innerHTML=currencies.map(c=>`<option>${c}</option>`).join('');
 $('#cycle-options').innerHTML=Object.entries(cycles).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
-$('#category-options').innerHTML=categories.map(c=>`<option>${c}</option>`).join('');
+$('#editor-section').innerHTML=sections.map(section=>`<option value="${section.id}">${section.name}</option>`).join('');
+$('#editor-section').onchange=()=>updateEditorSection();
+$('#payment-preset').onchange=()=>{$('#subscription-form').elements.namedItem('method').value=$('#payment-preset').value;};
+$('#subscription-form').elements.namedItem('method').addEventListener('input',syncPaymentPreset);
 $('#add-button').onclick=()=>edit();$('#close-editor').onclick=$('#cancel-editor').onclick=()=>$('#editor').close();
-document.addEventListener('click',event=>{const target=event.target.closest('[data-edit]');if(target)edit(target.dataset.edit);});
+document.addEventListener('click',event=>{
+ const target=event.target.closest('[data-edit]');if(target)edit(target.dataset.edit);
+ const add=event.target.closest('[data-add-section]');if(add)edit(undefined,add.dataset.addSection);
+ const section=event.target.closest('[data-section]');if(section){activeSection=section.dataset.section;renderCards();$(`[data-section="${activeSection}"]`).focus();}
+});
 document.querySelectorAll('[data-view]').forEach(button=>{button.onclick=()=>setView(button.dataset.view);});
 $('#calendar-button').onclick=()=>setView('calendar');$('#privacy-button').onclick=()=>setView('data');
 document.querySelectorAll('[data-filter]').forEach(button=>{button.onclick=()=>{filter=button.dataset.filter;document.querySelectorAll('[data-filter]').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});renderCards();};});
 $('#search').addEventListener('input',renderCards);
 for(const mode of ['grid','list'])$(`#${mode}-view`).onclick=()=>{list=mode==='list';for(const other of ['grid','list']){$(`#${other}-view`).classList.toggle('selected',other===mode);$(`#${other}-view`).setAttribute('aria-pressed',String(other===mode));}renderCards();};
 $('#subscription-form').onsubmit=event=>{
- event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));data.amount=Number(data.amount);data.name=data.name.trim();data.id ||= crypto.randomUUID();
+ event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));data.amount=Number(data.amount);data.name=data.name.trim();data.method=data.method.trim();data.id ||= crypto.randomUUID();
  try{validate([data]);}catch(error){$('#form-error').textContent=error.message;return;}
  const next=items.some(s=>s.id===data.id)?items.map(s=>s.id===data.id?data:s):[...items,data];
- if(save(next)){$('#editor').close();toast('订阅已保存在此浏览器');}
+ if(save(next)){$('#editor').close();toast(paymentHistoryWarning||'订阅已保存在此浏览器');}
 };
 $('#delete-button').onclick=()=>{const id=$('#subscription-form').elements.namedItem('id').value;confirmAction('确定删除这项订阅吗？此操作无法撤销。',()=>{if(save(items.filter(s=>s.id!==id))){$('#editor').close();toast('订阅已删除');}});};
 $('#start-empty').onclick=()=>{if(save([]))toast('准备好了，添加你的第一项订阅吧');};
 $('#load-demo').onclick=()=>confirmAction('载入 6 项示例订阅将替换当前订阅。建议先导出备份，是否继续？',()=>{if(save(samples())){setView('overview');toast('示例订阅已载入，现在可以自由编辑');}});
 $('#export-button').onclick=()=>{
  if(blocked){toast('现有存储无法读取，无法导出有效备份。请先检查浏览器存储。');return;}
- const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),subscriptions:items},null,2)],{type:'application/json'});
+ readPaymentHistory();
+ const paymentMethods=[...new Set([...paymentHistory,...items.map(s=>s.method.trim())])].filter(Boolean).filter(method=>!paymentPresets.includes(method)).slice(0,100);
+ const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),subscriptions:items,paymentMethods},null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`subscrible-${dateKey(today)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(demo?'已导出个人数据（示例预览不在备份中）':'备份已导出，请妥善保管');
 };
 $('#import-button').onclick=()=>$('#import-file').click();
-$('#import-file').onchange=async event=>{const file=event.target.files[0];event.target.value='';if(!file)return;try{if(file.size>5*1024*1024)throw new Error('备份文件不能超过 5 MB');const backup=JSON.parse(await file.text());if(backup.version!==1)throw new Error('不支持的备份版本');const restored=validate(backup.subscriptions);confirmAction(`将使用备份中的 ${restored.length} 项订阅替换当前数据，是否继续？`,()=>{if(save(restored,true))toast('备份已导入');});}catch(error){toast(`导入失败：${error.message}`);}};
+$('#import-file').onchange=async event=>{const file=event.target.files[0];event.target.value='';if(!file)return;try{if(file.size>5*1024*1024)throw new Error('备份文件不能超过 5 MB');const backup=JSON.parse(await file.text());if(backup.version!==1)throw new Error('不支持的备份版本');const restored=validate(backup.subscriptions);const methods=validatePaymentMethods(backup.paymentMethods??[]);confirmAction(`将使用备份中的 ${restored.length} 项订阅替换当前数据，是否继续？`,()=>{if(save(restored,true)){rememberPaymentMethods([...methods,...restored.map(s=>s.method)]);toast(paymentHistoryWarning||'备份已导入');}});}catch(error){toast(`导入失败：${error.message}`);}};
 $('#previous-month').onclick=()=>{if(calendarMonth.getFullYear()>1900){calendarMonth.setMonth(calendarMonth.getMonth()-1);renderCalendar();}};
 $('#next-month').onclick=()=>{if(calendarMonth.getFullYear()<9999){calendarMonth.setMonth(calendarMonth.getMonth()+1);renderCalendar();}};
 $('#current-month').onclick=()=>{calendarMonth=new Date(today.getFullYear(),today.getMonth(),1);renderCalendar();};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){today=parseDate(dateKey(new Date()));render();}});
-window.addEventListener('storage',event=>{if(event.key!==KEY&&event.key!==null)return;try{const stored=localStorage.getItem(KEY);items=stored===null?[]:validate(JSON.parse(stored));demo=stored===null;blocked=false;$('#editor').close();render();toast('已同步此浏览器其他标签页的变更');}catch{blocked=true;startupError='其他标签页写入的数据无法读取，已停止写入以保护数据。';toast(startupError);}});
+window.addEventListener('storage',event=>{if(event.key===METHODS_KEY||event.key===null){readPaymentHistory();if($('#editor').open)renderPaymentOptions();}if(event.key!==KEY&&event.key!==null)return;try{const stored=localStorage.getItem(KEY);items=stored===null?[]:validate(JSON.parse(stored));demo=stored===null;blocked=false;$('#editor').close();render();toast('已同步此浏览器其他标签页的变更');}catch{blocked=true;startupError='其他标签页写入的数据无法读取，已停止写入以保护数据。';toast(startupError);}});
 render();if(startupError)toast(startupError);

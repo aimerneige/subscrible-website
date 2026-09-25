@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextPayment, dateKey, parseDate, monthly, validate } from './model.js';
+import { nextPayment, dateKey, parseDate, monthly, validate, categories, sections, sectionFor, validatePaymentMethods } from './model.js';
 const item={id:'1',name:'Example',amount:120,currency:'USD',cycle:'monthly',category:'其他',status:'active',method:'',notes:'',date:'2024-01-31'};
 test('monthly recurrence clamps month-end without changing the anchor',()=>{
  assert.equal(dateKey(nextPayment(item,parseDate('2024-02-01'))),'2024-02-29');
@@ -25,4 +25,17 @@ test('monthly normalization',()=>{
 test('imports reject malformed data, duplicates and impossible dates',()=>{
  assert.deepEqual(validate([item]),[item]);
  for(const bad of [null,{},[item,item],[{...item,amount:-1}],[{...item,date:'2024-02-30'}],[{...item,cycle:'toString'}],[{...item,notes:null}],[{...item,currency:'INVALID'}]])assert.throws(()=>validate(bad));
+});
+test('every category belongs to exactly one section, preserving existing categories',()=>{
+ assert.deepEqual(sections.flatMap(section=>section.categories).sort(), [...categories].sort());
+ assert.equal(sectionFor('影音娱乐').id,'app');
+ assert.equal(sectionFor('域名服务').id,'domain');
+ assert.equal(sectionFor('住房租金').id,'life');
+ assert.equal(sectionFor('通讯网络').id,'life');
+ assert.equal(sectionFor('保险保障').id,'life');
+ for(const category of ['服务器托管','游戏服务'])assert.equal(validate([{...item,category}])[0].category,category);
+});
+test('payment history accepts custom names, trims and deduplicates, rejects invalid backups',()=>{
+ assert.deepEqual(validatePaymentMethods([' 家庭账户 ','家庭账户','备用卡']),['家庭账户','备用卡']);
+ for(const invalid of [null,{},[''],['  '],[42],['a'.repeat(81)],Array(101).fill('Visa')])assert.throws(()=>validatePaymentMethods(invalid));
 });
