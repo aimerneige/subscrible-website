@@ -1,4 +1,4 @@
-import { cycles, currencies, sections, sectionFor, paymentPresets, validatePaymentMethods, monthly, nextPayment, dateKey, parseDate, validate } from './model.js';
+import { cycles, currencies, sections, sectionFor, paymentPresets, validatePaymentMethods, monthly, nextPayment, dateKey, parseDate, validate, calculateSpending } from './model.js';
 const $ = s => document.querySelector(s);
 const paths = {
 server:'<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.1M7 17.5h.1M12 6.5h5M12 17.5h5"/>',
@@ -89,11 +89,31 @@ function render(){
  $('#upcoming-list').innerHTML=upcoming.slice(0,4).map(({s,date})=>`<div class="upcoming-item"><div class="date-tile"><small>${date.getMonth()+1} 月</small><strong>${date.getDate()}</strong></div><div><div class="upcoming-name">${esc(s.name)}</div><div class="upcoming-detail">${daysUntil(date)===0?'今天':`${daysUntil(date)} 天后`} · ${cycles[s.cycle]}</div></div><div class="upcoming-price">${money(s.amount,s.currency)}</div></div>`).join('')||'<p class="muted">暂无待扣款订阅。添加付款日期后，即可在这里查看。</p>';
  renderCards();if(view==='calendar')renderCalendar();
 }
+function renderSpendingSummary(spendingList){
+ const el=$('#section-spending');
+ if(!el)return;
+ if(!spendingList.length){
+  el.innerHTML='<span class="spending-label">总支出</span><span class="spending-empty">—</span>';
+  return;
+ }
+ const pills=spendingList.map(item=>{
+  if(item.type==='yearly'){
+   return `<span class="spending-pill"><strong>${money(item.yearly,item.currency)}</strong><small>/年</small><span class="spending-sub">月均 ${money(item.monthly,item.currency)}</span></span>`;
+  }
+  if(item.type==='monthly'){
+   return `<span class="spending-pill"><strong>${money(item.monthly,item.currency)}</strong><small>/月</small><span class="spending-sub">年折合 ${money(item.yearly,item.currency)}</span></span>`;
+  }
+  return `<span class="spending-pill"><strong>${money(item.monthly,item.currency)}</strong><small>月均</small><span class="spending-sub">年折合 ${money(item.yearly,item.currency)}</span></span>`;
+ }).join('');
+ el.innerHTML=`<span class="spending-label">总支出</span><div class="spending-pills">${pills}</div>`;
+}
 function renderCards(){
  const query=$('#search').value.trim().toLocaleLowerCase();
  const all=displayed();
  const filtered=all.filter(s=>(activeSection==='all'||sectionFor(s.category).id===activeSection)&&(filter==='all'||(filter==='paused'?s.status==='paused':s.cycle===filter&&s.status==='active'))&&`${s.name} ${s.method} ${s.category}`.toLocaleLowerCase().includes(query));
  $('#list-count').textContent=filtered.length;
+ const targetItems=filtered.filter(s=>filter==='paused'?s.status==='paused':s.status==='active');
+ renderSpendingSummary(calculateSpending(targetItems));
  $('#section-navigation').innerHTML=`<button class="section-tab ${activeSection==='all'?'selected':''}" data-section="all" aria-pressed="${activeSection==='all'}">全部 <span>${all.length}</span></button>`+sections.map(section=>`<button class="section-tab ${activeSection===section.id?'selected':''}" data-section="${section.id}" aria-pressed="${activeSection===section.id}">${icon(section.icon)}${section.name}<span>${all.filter(s=>sectionFor(s.category).id===section.id).length}</span></button>`).join('');
  $('#subscription-grid').innerHTML=sections.filter(section=>activeSection==='all'||activeSection===section.id).map(section=>{
    const entries=filtered.filter(s=>sectionFor(s.category).id===section.id);

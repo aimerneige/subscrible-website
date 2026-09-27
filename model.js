@@ -47,3 +47,29 @@ export function validate(items) {
     return { id: s.id, name: s.name.trim(), amount: s.amount, currency: s.currency, cycle: s.cycle, category: s.category, status: s.status, method: s.method, date: s.date, notes: s.notes };
   });
 }
+export function calculateSpending(items) {
+  if (!Array.isArray(items) || !items.length) return [];
+  const map = new Map();
+  for (const s of items) {
+    if (!map.has(s.currency)) map.set(s.currency, []);
+    map.get(s.currency).push(s);
+  }
+  return [...map.entries()].map(([currency, list]) => {
+    const allYearly = list.every(s => s.cycle === 'yearly');
+    const allMonthly = list.every(s => s.cycle === 'monthly');
+    const monthlySum = list.reduce((sum, s) => sum + monthly(s), 0);
+    const yearlySum = allYearly ? list.reduce((sum, s) => sum + s.amount, 0) : monthlySum * 12;
+
+    let type = 'mixed';
+    if (allYearly) type = 'yearly';
+    else if (allMonthly) type = 'monthly';
+
+    return {
+      currency,
+      type,
+      monthly: allMonthly ? list.reduce((sum, s) => sum + s.amount, 0) : monthlySum,
+      yearly: yearlySum,
+      count: list.length
+    };
+  });
+}

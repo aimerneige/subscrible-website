@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextPayment, dateKey, parseDate, monthly, validate, categories, sections, sectionFor, validatePaymentMethods } from './model.js';
+import { nextPayment, dateKey, parseDate, monthly, validate, categories, sections, sectionFor, validatePaymentMethods, calculateSpending } from './model.js';
 const item={id:'1',name:'Example',amount:120,currency:'USD',cycle:'monthly',category:'其他',status:'active',method:'',notes:'',date:'2024-01-31'};
 test('monthly recurrence clamps month-end without changing the anchor',()=>{
  assert.equal(dateKey(nextPayment(item,parseDate('2024-02-01'))),'2024-02-29');
@@ -38,4 +38,39 @@ test('every category belongs to exactly one section, preserving existing categor
 test('payment history accepts custom names, trims and deduplicates, rejects invalid backups',()=>{
  assert.deepEqual(validatePaymentMethods([' 家庭账户 ','家庭账户','备用卡']),['家庭账户','备用卡']);
  for(const invalid of [null,{},[''],['  '],[42],['a'.repeat(81)],Array(101).fill('Visa')])assert.throws(()=>validatePaymentMethods(invalid));
+});
+test('calculateSpending aggregates by currency and cycle correctly',()=>{
+ assert.deepEqual(calculateSpending([]),[]);
+ const domainItems=[{...item,name:'aimer.moe',amount:13.99,currency:'USD',cycle:'yearly',category:'域名服务'}];
+ const domainResult=calculateSpending(domainItems);
+ assert.equal(domainResult.length,1);
+ assert.equal(domainResult[0].currency,'USD');
+ assert.equal(domainResult[0].type,'yearly');
+ assert.equal(domainResult[0].yearly,13.99);
+ assert.ok(Math.abs(domainResult[0].monthly - 13.99 / 12) < 1e-6);
+
+ const monthlyItems=[
+   {...item,name:'Netflix',amount:2290,currency:'JPY',cycle:'monthly',category:'影音娱乐'},
+   {...item,name:'Spotify',amount:1080,currency:'JPY',cycle:'monthly',category:'影音娱乐'}
+ ];
+ const monthlyResult=calculateSpending(monthlyItems);
+ assert.equal(monthlyResult[0].currency,'JPY');
+ assert.equal(monthlyResult[0].type,'monthly');
+ assert.equal(monthlyResult[0].monthly,3370);
+ assert.equal(monthlyResult[0].yearly,40440);
+
+ const mixedItems=[
+   {...item,name:'ChatGPT',amount:20,currency:'USD',cycle:'monthly'},
+   {...item,name:'Domain',amount:120,currency:'USD',cycle:'yearly'},
+   {...item,name:'Mail',amount:30,currency:'CNY',cycle:'monthly'}
+ ];
+ const mixedResult=calculateSpending(mixedItems);
+ assert.equal(mixedResult.length,2);
+ const usd=mixedResult.find(r=>r.currency==='USD');
+ assert.equal(usd.type,'mixed');
+ assert.equal(usd.monthly,30);
+ assert.equal(usd.yearly,360);
+ const cny=mixedResult.find(r=>r.currency==='CNY');
+ assert.equal(cny.type,'monthly');
+ assert.equal(cny.monthly,30);
 });
